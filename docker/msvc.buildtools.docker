@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.6
+
+ARG BASE=msvc-wine:latest
+FROM ${BASE}
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        cmake \
+        curl \
+        file \
+        git \
+        make \
+        meson \
+        ninja-build \
+        pkg-config \
+        python3 \
+        python3-venv \
+        sccache \
+        unzip \
+        xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && if [ -x /root/.local/bin/uv ]; then ln -sf /root/.local/bin/uv /usr/local/bin/uv; fi \
+    && if [ -x /root/.local/bin/uvx ]; then ln -sf /root/.local/bin/uvx /usr/local/bin/uvx; fi
+
+ENV PATH="/root/.local/bin:${PATH}"
