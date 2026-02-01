@@ -13,6 +13,8 @@ ARG SDK_VERSION=
 ARG MSVC_ARCHS="x64"
 ARG HOST_ARCH="x64"
 ARG ONLY_HOST=yes
+ARG MSVC_TRIM=no
+ARG MSVC_TRIM_FLAGS="--only-sdk-version --trim-optional"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -28,6 +30,7 @@ SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 WORKDIR /opt/msvc-src
 COPY lowercase fixinclude install.sh vsdownload.py msvctricks.cpp msvcenv-native.sh ./
+COPY scripts/trim-msvc.sh ./scripts/trim-msvc.sh
 COPY patches ./patches
 COPY wrappers ./wrappers
 
@@ -150,6 +153,11 @@ block = crlf.join(line.encode("utf-8") for line in lines)
 data = data.replace(needle, needle + block, 1)
 vcvars.write_bytes(data)
 PY
+
+RUN if [ "$MSVC_TRIM" = "yes" ]; then \
+        read -r -a trim_flags <<< "$MSVC_TRIM_FLAGS"; \
+        ./scripts/trim-msvc.sh --root "$MSVC_DEST" --keep-archs "$MSVC_ARCHS" --host-arch "$HOST_ARCH" "${trim_flags[@]}"; \
+    fi
 
 RUN cp msvcenv-native.sh "$MSVC_DEST/" \
     && rm -rf /opt/msvc-src

@@ -48,7 +48,8 @@ This section documents the current Docker workflow based on the
 
 - A slim Debian-based image with MSVC + Windows SDK at `/opt/msvc`
 - A repeatable test image that exercises the toolchain end-to-end
-- Optional smoke-test images for quick validation
+- A buildtools image with CMake, Ninja, Python, uv, and sccache
+- An optional trimming step to reduce image size
 
 ## Quick start
 
@@ -70,6 +71,38 @@ Inside the container, the wrappers are on PATH (default host arch is x64):
 cl /?   # example
 ```
 
+## Buildtools image for real projects
+
+This image layers common build tools on top of the base MSVC image.
+
+```bash
+docker build -f docker/msvc.buildtools.docker -t msvc-wine:buildtools \
+  --build-arg BASE=msvc-wine:latest .
+```
+
+## Trim the MSVC installation
+
+You can remove unused architectures and optional SDK bundles to reduce size.
+Trimming is opt-in and is controlled by build arguments.
+
+```bash
+docker build -f docker/msvc.docker -t msvc-wine:trim \
+  --build-arg MSVC_TRIM=yes \
+  --build-arg MSVC_TRIM_FLAGS="--only-sdk-version --trim-optional" .
+```
+
+The trimming logic lives in `scripts/trim-msvc.sh` and can be tuned via:
+
+- `MSVC_TRIM_FLAGS` for trimming options
+- `MSVC_ARCHS` and `HOST_ARCH` to keep only needed architectures
+
+To build a trimmed buildtools image:
+
+```bash
+docker build -f docker/msvc.buildtools.docker -t msvc-wine:buildtools-trim \
+  --build-arg BASE=msvc-wine:trim .
+```
+
 ## Configure target architectures (optional)
 
 By default only `x64` is included. To include additional targets:
@@ -87,6 +120,8 @@ Useful build arguments:
 - `MSVC_VERSION` - pin a specific MSVC toolset version (optional)
 - `SDK_VERSION` - pin a specific Windows SDK version (optional)
 - `WITH_WINBIND` - include winbind in the runtime image (default: `no`)
+- `MSVC_TRIM` - enable trimming of unused components (default: `no`)
+- `MSVC_TRIM_FLAGS` - trimming options passed to `scripts/trim-msvc.sh`
 - `DEBIAN_VERSION` / `DEBIAN_FLAVOR` - base distro (defaults: `bookworm-slim`)
 
 ## Validation workflows
