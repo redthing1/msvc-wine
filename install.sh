@@ -101,6 +101,18 @@ if [ -d Hostarm64/ARM64 ]; then
     # 17.2 - 17.3
     mv Hostarm64/ARM64 Hostarm64/arm64
 fi
+if [ -d Hostx64 ] && [ ! -e HostX64 ]; then
+    ln -s Hostx64 HostX64
+fi
+if [ -d Hostarm64 ] && [ ! -e HostARM64 ]; then
+    ln -s Hostarm64 HostARM64
+fi
+if [ -d Hostarm64 ] && [ ! -e HostArm64 ]; then
+    ln -s Hostarm64 HostArm64
+fi
+if [ -d Hostarm64/arm64 ] && [ ! -e Hostarm64/ARM64 ]; then
+    ln -s arm64 Hostarm64/ARM64
+fi
 cd "$DEST"
 
 if [ -d kits/10 ]; then

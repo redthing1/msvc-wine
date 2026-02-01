@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1.6
+
+ARG BASE=msvc
+FROM ${BASE}
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        clang \
+        lld \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN if ! command -v clang-cl >/dev/null 2>&1; then \
+        ln -s "$(command -v clang)" /usr/local/bin/clang-cl; \
+    fi
+
+RUN if ! command -v lld-link >/dev/null 2>&1; then \
+        if command -v lld >/dev/null 2>&1; then \
+            ln -s "$(command -v lld)" /usr/local/bin/lld-link; \
+        elif command -v ld.lld >/dev/null 2>&1; then \
+            ln -s "$(command -v ld.lld)" /usr/local/bin/lld-link; \
+        fi; \
+    fi
+
+COPY test/hello.c /tmp/hello.c
+
+RUN for arch in x86 x64 arm arm64; do \
+        if [[ -d /opt/msvc/kits/10/lib/*/um/$arch ]]; then \
+            BIN=/opt/msvc/bin/$arch . /opt/msvc/msvcenv-native.sh; \
+            clang-cl --target="$TARGET_TRIPLE" /tmp/hello.c -fuse-ld=lld -Fe/tmp/hello-$arch.exe; \
+            clang --target="$TARGET_TRIPLE" /tmp/hello.c -fuse-ld=lld -o /tmp/hello-$arch.exe; \
+        fi; \
+    done

@@ -22,7 +22,7 @@
 mtRetIsUpdate() {
     eval $(printf '%q ' "$@")
     local mtRet=$?
-    if [ $mtRet -eq 1090650113 ] || [ $mtRet -eq 187 ]; then
+    if [ $mtRet -eq 1090650113 ] || [ $mtRet -eq 187 ] || [ $mtRet -eq 1 ] || [ $mtRet -eq 0 ]; then
         return 0
     else
         return 1

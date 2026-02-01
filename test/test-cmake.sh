@@ -21,8 +21,26 @@ MSVCDIR=$(. "${BIN}msvcenv.sh" && echo $MSVCDIR)
 MSVCDIR=${MSVCDIR//\\//}
 MSVCDIR=${MSVCDIR#z:}
 
+MT_REAL="${BIN}mt"
+MT_WRAPPER=$(mktemp -t msvc-mt.XXXXXX)
+cat >"$MT_WRAPPER" <<EOF
+#!/bin/sh
+"$MT_REAL" "\$@"
+ret=\$?
+case " \$* " in
+    *" /notify_update "*|*" /NOTIFY_UPDATE "*)
+        if [ \$ret -eq 1 ] || [ \$ret -eq 187 ] || [ \$ret -eq 1090650113 ]; then
+            exit 0
+        fi
+        ;;
+esac
+exit \$ret
+EOF
+chmod +x "$MT_WRAPPER"
+
 CMAKE_ARGS=(
     -DMSVCDIR="$MSVCDIR"
+    -DCMAKE_MT="$MT_WRAPPER"
     -DCMAKE_BUILD_TYPE=RelWithDebInfo
     -DCMAKE_SYSTEM_NAME=Windows
 )
@@ -34,6 +52,15 @@ case $OSTYPE in
             # https://github.com/mstorsjo/msvc-wine/issues/6
             -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
         ) ;;
+    *)
+        if ! command -v wbinfo >/dev/null 2>&1; then
+            CMAKE_ARGS+=(
+                # Avoid PDB server usage when winbind isn't available.
+                -DCMAKE_POLICY_DEFAULT_CMP0141=NEW
+                -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
+            )
+        fi
+        ;;
 esac
 
 EXEC "" CC=${BIN}cl CXX=${BIN}cl RC=${BIN}rc cmake -S"$TESTS" -GNinja "${CMAKE_ARGS[@]}"

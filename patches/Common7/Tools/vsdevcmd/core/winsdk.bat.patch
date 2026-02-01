@@ -41,7 +41,7 @@ diff --git a/Common7/Tools/vsdevcmd/core/winsdk.bat b/Common7/Tools/vsdevcmd/cor
  :GetWin10SdkDirHelper
  
  @REM Get Windows 10 SDK installed folder
-+if "%1"=="" (if exist "%VSINSTALLDIR%Windows Kits\10\include\" SET "WindowsSdkDir=%VSINSTALLDIR%Windows Kits\10\") else ^
++if "%1"=="" (if exist "%VSINSTALLDIR%Windows Kits\10\include\" SET "WindowsSdkDir=%VSINSTALLDIR%Windows Kits\10\\") else ^
  for /F "tokens=1,2*" %%i in ('reg query "%1\Microsoft\Microsoft SDKs\Windows\v10.0" /v "InstallationFolder"') DO (
      if "%%i"=="InstallationFolder" (
          SET WindowsSdkDir=%%~k
@@ -68,7 +68,7 @@ diff --git a/Common7/Tools/vsdevcmd/core/winsdk.bat b/Common7/Tools/vsdevcmd/cor
  
  :GetUniversalCRTSdkDirHelper
 +if "%1"=="" (if exist "%WindowsSdkDir%Lib\%WindowsSDKVersion%ucrt\" (SET "UniversalCRTSdkDir=%WindowsSdkDir%"
-+) else if exist "%VSINSTALLDIR%Windows Kits\10\Lib\" SET "UniversalCRTSdkDir=%VSINSTALLDIR%Windows Kits\10\") else ^
++) else if exist "%VSINSTALLDIR%Windows Kits\10\Lib\" SET "UniversalCRTSdkDir=%VSINSTALLDIR%Windows Kits\10\\") else ^
  for /F "tokens=1,2*" %%i in ('reg query "%1\Microsoft\Windows Kits\Installed Roots" /v "KitsRoot10"') DO (
      if "%%i"=="KitsRoot10" (
          SET UniversalCRTSdkDir=%%k

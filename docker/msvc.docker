@@ -1,0 +1,207 @@
+# syntax=docker/dockerfile:1.6
+
+ARG DEBIAN_VERSION=bookworm
+ARG DEBIAN_FLAVOR=slim
+
+FROM debian:${DEBIAN_VERSION}-${DEBIAN_FLAVOR} AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG MSVC_DEST=/opt/msvc
+ARG VS_MAJOR=17
+ARG MSVC_VERSION=
+ARG SDK_VERSION=
+ARG MSVC_ARCHS="x64"
+ARG HOST_ARCH="x64"
+ARG ONLY_HOST=yes
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        git \
+        msitools \
+        perl \
+        python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+WORKDIR /opt/msvc-src
+COPY lowercase fixinclude install.sh vsdownload.py msvctricks.cpp msvcenv-native.sh ./
+COPY patches ./patches
+COPY wrappers ./wrappers
+
+RUN \
+    args=("--accept-license" "--dest" "$MSVC_DEST" "--major" "$VS_MAJOR" "--host-arch" "$HOST_ARCH" "--only-host" "$ONLY_HOST"); \
+    if [[ -n "$MSVC_VERSION" ]]; then args+=("--msvc-version" "$MSVC_VERSION"); fi; \
+    if [[ -n "$SDK_VERSION" ]]; then args+=("--sdk-version" "$SDK_VERSION"); fi; \
+    read -r -a archs <<< "$MSVC_ARCHS"; \
+    if [[ ${#archs[@]} -gt 0 ]]; then args+=("--architecture" "${archs[@]}"); fi; \
+    PYTHONUNBUFFERED=1 ./vsdownload.py "${args[@]}" \
+    && ./install.sh "$MSVC_DEST"
+
+RUN python3 - <<'PY'
+from pathlib import Path
+
+path = Path("/opt/msvc/Common7/Tools/vsdevcmd/core/parse_cmd.bat")
+data = path.read_bytes()
+
+if b":parse_loop_wine" in data:
+    raise SystemExit(0)
+
+crlf = b"\r\n"
+
+needle = b"set __local_parse_error=0" + crlf
+insert = (
+    b"set __local_parse_error=0" + crlf + crlf +
+    b"call :parse_loop_wine %__VSCMD_ARGS_LIST%" + crlf +
+    b"goto :after_parse_loop" + crlf
+)
+if needle not in data:
+    raise SystemExit("parse_cmd.bat: anchor not found for parse loop injection")
+data = data.replace(needle, insert, 1)
+
+debug_block = crlf + b'if "%VSCMD_DEBUG%" GEQ "2" (' + crlf
+if debug_block not in data:
+    raise SystemExit("parse_cmd.bat: debug block anchor not found")
+data = data.replace(debug_block, crlf + b":after_parse_loop" + crlf + debug_block, 1)
+
+parse_arg_inner = crlf + b":parse_arg_inner" + crlf
+if parse_arg_inner not in data:
+    raise SystemExit("parse_cmd.bat: parse_arg_inner anchor not found")
+
+lines = [
+    ":parse_loop_wine",
+    "set \"__VSCMD_PENDING_ARG=\"",
+    ":parse_loop_wine_next",
+    "if \"%1\"==\"\" goto :parse_loop_wine_done",
+    "if \"%__VSCMD_PENDING_ARG%\" NEQ \"\" (",
+    "    call :parse_arg_inner %__VSCMD_PENDING_ARG% %1",
+    "    set \"__VSCMD_PENDING_ARG=\"",
+    "    shift",
+    "    goto :parse_loop_wine_next",
+    ")",
+    "if /I \"%1\"==\"-arch\" set \"__VSCMD_PENDING_ARG=-arch\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"/arch\" set \"__VSCMD_PENDING_ARG=-arch\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"-host_arch\" set \"__VSCMD_PENDING_ARG=-host_arch\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"/host_arch\" set \"__VSCMD_PENDING_ARG=-host_arch\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"-winsdk\" set \"__VSCMD_PENDING_ARG=-winsdk\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"/winsdk\" set \"__VSCMD_PENDING_ARG=-winsdk\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"-app_platform\" set \"__VSCMD_PENDING_ARG=-app_platform\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"/app_platform\" set \"__VSCMD_PENDING_ARG=-app_platform\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"-startdir\" set \"__VSCMD_PENDING_ARG=-startdir\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"/startdir\" set \"__VSCMD_PENDING_ARG=-startdir\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"-vcvars_ver\" set \"__VSCMD_PENDING_ARG=-vcvars_ver\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"/vcvars_ver\" set \"__VSCMD_PENDING_ARG=-vcvars_ver\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"-vcvars_spectre_libs\" set \"__VSCMD_PENDING_ARG=-vcvars_spectre_libs\" & shift & goto :parse_loop_wine_next",
+    "if /I \"%1\"==\"/vcvars_spectre_libs\" set \"__VSCMD_PENDING_ARG=-vcvars_spectre_libs\" & shift & goto :parse_loop_wine_next",
+    "call :parse_arg_inner %1",
+    "shift",
+    "goto :parse_loop_wine_next",
+    ":parse_loop_wine_done",
+    "set \"__VSCMD_PENDING_ARG=\"",
+    "exit /B 0",
+    "",
+]
+snippet = crlf.join(line.encode("utf-8") for line in lines)
+data = data.replace(parse_arg_inner, crlf + snippet + parse_arg_inner, 1)
+
+path.write_bytes(data)
+PY
+
+RUN python3 - <<'PY'
+from pathlib import Path
+
+sdkver = None
+msvcenv = Path("/opt/msvc/bin/x64/msvcenv.sh")
+if msvcenv.exists():
+    for line in msvcenv.read_text().splitlines():
+        if line.startswith("SDKVER="):
+            sdkver = line.split("=", 1)[1].strip()
+            break
+if not sdkver:
+    raise SystemExit("SDKVER not found in msvcenv.sh")
+
+vcvars = Path("/opt/msvc/VC/Auxiliary/Build/vcvarsall.bat")
+data = vcvars.read_bytes()
+if b"msvc-wine sdk fallback" in data:
+    raise SystemExit(0)
+
+crlf = b"\r\n"
+needle = b'call "%~dp0..\\..\\..\\Common7\\Tools\\vsdevcmd.bat" %__VCVARSALL_VSDEVCMD_ARGS%' + crlf
+if needle not in data:
+    raise SystemExit("vcvarsall.bat: vsdevcmd call not found")
+
+sdkver_bs = sdkver + "\\"
+lines = [
+    "@REM msvc-wine sdk fallback for Wine cmd limitations",
+    "if \"%WindowsSdkDir%\"==\"\" set \"WindowsSdkDir=%VSINSTALLDIR%kits\\10\\\"",
+    f"if \"%WindowsSDKVersion%\"==\"\" set \"WindowsSDKVersion={sdkver_bs}\"",
+    f"if \"%WindowsSDKVersion%\"==\"\\\" set \"WindowsSDKVersion={sdkver_bs}\"",
+    "if \"%WindowsSdkBinPath%\"==\"\" set \"WindowsSdkBinPath=%WindowsSdkDir%bin\\\"",
+    "if exist \"%WindowsSdkBinPath%%WindowsSDKVersion%\" set \"WindowsSdkVerBinPath=%WindowsSdkBinPath%%WindowsSDKVersion%\"",
+    "if \"%UniversalCRTSdkDir%\"==\"\" set \"UniversalCRTSdkDir=%WindowsSdkDir%\"",
+    f"if \"%UCRTVersion%\"==\"\" set \"UCRTVersion={sdkver}\"",
+    "if not \"%WindowsSdkBinPath%\"==\"\" set \"PATH=%WindowsSdkBinPath%%VSCMD_ARG_HOST_ARCH%;%PATH%\"",
+    "if not \"%WindowsSdkVerBinPath%\"==\"\" set \"PATH=%WindowsSdkVerBinPath%%VSCMD_ARG_HOST_ARCH%;%PATH%\"",
+    "",
+]
+block = crlf.join(line.encode("utf-8") for line in lines)
+data = data.replace(needle, needle + block, 1)
+vcvars.write_bytes(data)
+PY
+
+RUN cp msvcenv-native.sh "$MSVC_DEST/" \
+    && rm -rf /opt/msvc-src
+
+RUN if [ -d "$MSVC_DEST/bin" ]; then \
+        read -r -a keep_archs <<< "$MSVC_ARCHS"; \
+        for dir in "$MSVC_DEST"/bin/*; do \
+            arch="$(basename "$dir")"; \
+            keep=no; \
+            for k in "${keep_archs[@]}"; do \
+                if [ "$arch" = "$k" ]; then keep=yes; break; fi; \
+            done; \
+            if [ "$keep" != "yes" ]; then rm -rf "$dir"; fi; \
+        done; \
+    fi
+
+FROM debian:${DEBIAN_VERSION}-${DEBIAN_FLAVOR} AS runtime
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG MSVC_DEST=/opt/msvc
+ARG HOST_ARCH="x64"
+ARG WITH_WINBIND=no
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        wine64 \
+    && if [ "$WITH_WINBIND" = "yes" ]; then \
+        apt-get install -y --no-install-recommends winbind; \
+    fi \
+    && if [ ! -x /usr/bin/wine64 ] && [ -x /usr/lib/wine/wine64 ]; then \
+        ln -s /usr/lib/wine/wine64 /usr/bin/wine64; \
+    fi \
+    && if [ ! -x /usr/bin/wineserver ] && [ -x /usr/lib/wine/wineserver ]; then \
+        ln -s /usr/lib/wine/wineserver /usr/bin/wineserver; \
+    fi \
+    && if [ ! -x /usr/local/bin/winepath ]; then \
+        printf '%s\n' '#!/bin/sh' 'exec /usr/bin/wine64 winepath \"$@\"' > /usr/local/bin/winepath; \
+        chmod +x /usr/local/bin/winepath; \
+    fi \
+    && if [ ! -x /usr/local/bin/wineboot ]; then \
+        printf '%s\n' '#!/bin/sh' 'exec /usr/bin/wine64 wineboot \"$@\"' > /usr/local/bin/wineboot; \
+        chmod +x /usr/local/bin/wineboot; \
+    fi \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder "$MSVC_DEST" "$MSVC_DEST"
+
+RUN if [ -f "$MSVC_DEST/Common7/Tools/vsdevcmd/core/winsdk.bat" ]; then \
+        sed -i 's/Windows Kits\\\\10\")/Windows Kits\\\\10\\\\\")/g' "$MSVC_DEST/Common7/Tools/vsdevcmd/core/winsdk.bat"; \
+    fi
+
+ENV PATH="$MSVC_DEST/bin/$HOST_ARCH:$PATH"
+WORKDIR /work

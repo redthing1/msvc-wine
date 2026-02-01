@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1.6
+
+ARG BASE=msvc
+FROM ${BASE}
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        cmake \
+        file \
+        git \
+        make \
+        meson \
+        ninja-build \
+        pkg-config \
+        python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY test /opt/msvc-test
+WORKDIR /opt/msvc-test
+
+RUN ./test.sh /opt/msvc

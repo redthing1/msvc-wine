@@ -1,0 +1,15 @@
+# syntax=docker/dockerfile:1.6
+
+ARG BASE=msvc
+FROM ${BASE}
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+COPY test/hello.c /tmp/hello.c
+
+RUN export WINEPREFIX=/tmp/wine \
+    && mkdir -p "$WINEPREFIX" \
+    && for arch in x86 x64 arm arm64; do \
+        if [[ -d /opt/msvc/kits/10/lib/*/um/$arch ]]; then \
+            /opt/msvc/bin/$arch/cl /tmp/hello.c -Fe/tmp/hello-$arch.exe; \
+        fi; \
+    done

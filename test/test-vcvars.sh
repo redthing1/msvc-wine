@@ -46,41 +46,34 @@ if not "%CWD%"=="%CD%" (
 
 set "WindowsSDKVersion=%WindowsSDKVersion:\=%"
 
-call :SaveUnixPath VSINSTALLDIR
-call :SaveUnixPath VCToolsInstallDir
-call :SaveUnixPath WindowsSdkDir
-call :SaveVariable WindowsSDKVersion
-call :SaveUnixPath UniversalCRTSdkDir
-call :SaveVariable UCRTVersion
+call :SaveVar VSINSTALLDIR
+call :SaveVar VCToolsInstallDir
+call :SaveVar WindowsSdkDir
+call :SaveVar WindowsSDKVersion
+call :SaveVar UniversalCRTSdkDir
+call :SaveVar UCRTVersion
 call :SearchInPath cl.exe
 call :SearchInPath rc.exe
 call :SearchInPath MSBuild.exe
 exit /B 0
 
 :SearchInPath
-setlocal EnableDelayedExpansion
 set "f=%1"
 set "f=%f:.=_%"
-for /F "delims=" %%G in ('where %1') do (
-    set "%f%=%%G"
-    call :SaveUnixPath %f%
-    exit /B 0
+for %%P in ("%PATH:;=" "%") do (
+    if not "%%~P"=="" if exist "%%~P\\%1" (
+        set "%f%=%%~P\\%1"
+        call :SaveVar %f%
+        exit /B 0
+    )
 )
 exit /B 1
 
-:SaveUnixPath
+:SaveVar
 setlocal EnableDelayedExpansion
-set "p=!%1!"
-if "%p:~-1%"=="\" set "p=%p:~0,-1%"
-for /F "delims=" %%G in ('winepath -u "%p%"') do (
-    set "%1=%%G"
-    call :SaveVariable %1
-)
-exit /B 0
-
-:SaveVariable
-setlocal EnableDelayedExpansion
-echo %1="!%1!" >> $vcvars_arch-env.txt
+set "v=!%1!"
+if "%v:~-1%"=="\" set "v=%v:~0,-1%"
+echo %1=!v!>> $vcvars_arch-env.txt
 exit /B 0
 EOF
 
@@ -103,7 +96,41 @@ TestRealPath() {
 
 EXEC "" WINEDEBUG=-all $(command -v wine64 || command -v wine) cmd /c test-$vcvars_arch.bat || EXIT
 tr -d '\r' <$vcvars_arch-env.txt >$vcvars_arch-env
-. $vcvars_arch-env
+
+get_var() {
+    local name=$1
+    local line
+    line=$(grep -m1 "^${name}=" "$vcvars_arch-env" || true)
+    printf '%s' "${line#*=}"
+}
+
+VSINSTALLDIR=$(get_var VSINSTALLDIR)
+VCToolsInstallDir=$(get_var VCToolsInstallDir)
+WindowsSdkDir=$(get_var WindowsSdkDir)
+WindowsSDKVersion=$(get_var WindowsSDKVersion)
+UniversalCRTSdkDir=$(get_var UniversalCRTSdkDir)
+UCRTVersion=$(get_var UCRTVersion)
+cl_exe=$(get_var cl_exe)
+rc_exe=$(get_var rc_exe)
+MSBuild_exe=$(get_var MSBuild_exe)
+
+to_unix_path() {
+    if [ -n "${!1}" ]; then
+        local val
+        val=$(WINEDEBUG=-all $(command -v wine64 || command -v wine) winepath -u "${!1}")
+        if [ -n "$val" ]; then
+            printf -v "$1" '%s' "$val"
+        fi
+    fi
+}
+
+to_unix_path VSINSTALLDIR
+to_unix_path VCToolsInstallDir
+to_unix_path WindowsSdkDir
+to_unix_path UniversalCRTSdkDir
+to_unix_path cl_exe
+to_unix_path rc_exe
+to_unix_path MSBuild_exe
 
 SDKBASE=$(. "${BIN}msvcenv.sh" && echo $SDKBASE)
 SDKBASE=${SDKBASE//\\//}
@@ -120,11 +147,12 @@ EXEC "" TestVariable WindowsSDKVersion  $(. "${BIN}msvcenv.sh" && echo $SDKVER)
 EXEC "" TestRealPath UniversalCRTSdkDir $SDKBASE
 EXEC "" TestVariable UCRTVersion        $(. "${BIN}msvcenv.sh" && echo $SDKVER)
 
-# Below tests require where.exe (available in Wine 9.3+).
-printf "%s\n" wine-9.3 $(WINEDEBUG=-all $(command -v wine64 || command -v wine) --version) | sort -VC || EXIT
-
-EXEC "" TestRealPath cl_exe             $(. "${BIN}msvcenv.sh" && echo $BINDIR)/cl.exe
-EXEC "" TestRealPath rc_exe             $(. "${BIN}msvcenv.sh" && echo $SDKBINDIR)/rc.exe
-EXEC "" TestRealPath MSBuild_exe        $(. "${BIN}msvcenv.sh" && echo $MSBUILDBINDIR)/MSBuild.exe
+if WINEDEBUG=-all $(command -v wine64 || command -v wine) cmd /c where /? >/dev/null 2>&1; then
+    EXEC "" TestRealPath cl_exe             $(. "${BIN}msvcenv.sh" && echo $BINDIR)/cl.exe
+    EXEC "" TestRealPath rc_exe             $(. "${BIN}msvcenv.sh" && echo $SDKBINDIR)/rc.exe
+    EXEC "" TestRealPath MSBuild_exe        $(. "${BIN}msvcenv.sh" && echo $MSBUILDBINDIR)/MSBuild.exe
+else
+    echo "Skipping where.exe checks; not available in this Wine."
+fi
 
 EXIT
