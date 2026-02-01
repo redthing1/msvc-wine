@@ -39,6 +39,80 @@ There's also a reproducible dockerfile, that creates a docker image with
 the MSVC tools available in `/opt/msvc`. (This also serves as a testable
 example of an environment where the install is known to work.)
 
+# Modern Docker workflow
+
+This section documents the current Docker workflow based on the
+`docker/*.docker` files. The rest of this README is kept intact below.
+
+## What you get
+
+- A slim Debian-based image with MSVC + Windows SDK at `/opt/msvc`
+- A repeatable test image that exercises the toolchain end-to-end
+- Optional smoke-test images for quick validation
+
+## Quick start
+
+Build the base image:
+
+```bash
+docker build -f docker/msvc.docker -t msvc-wine:latest .
+```
+
+Run an interactive container:
+
+```bash
+docker run --rm -it -v "$PWD:/work" msvc-wine:latest /bin/bash
+```
+
+Inside the container, the wrappers are on PATH (default host arch is x64):
+
+```bash
+cl /?   # example
+```
+
+## Configure target architectures (optional)
+
+By default only `x64` is included. To include additional targets:
+
+```bash
+docker build -f docker/msvc.docker -t msvc-wine:multiarch \
+  --build-arg MSVC_ARCHS="x86 x64 arm arm64" .
+```
+
+Useful build arguments:
+
+- `MSVC_ARCHS` - target architectures to include (default: `x64`)
+- `HOST_ARCH` - host architecture for toolchain packages (default: `x64`)
+- `ONLY_HOST` - download only host-arch packages (default: `yes`)
+- `MSVC_VERSION` - pin a specific MSVC toolset version (optional)
+- `SDK_VERSION` - pin a specific Windows SDK version (optional)
+- `WITH_WINBIND` - include winbind in the runtime image (default: `no`)
+- `DEBIAN_VERSION` / `DEBIAN_FLAVOR` - base distro (defaults: `bookworm-slim`)
+
+## Validation workflows
+
+These are practical, repeatable workflows that are exercised in CI-style
+Docker builds:
+
+Quick checks:
+
+```bash
+# Wine + cl.exe hello world
+docker build -f docker/msvc.hello.docker -t msvc-wine:hello \
+  --build-arg BASE=msvc-wine:latest .
+
+# Clang/LLD hello world using MSVC headers/libs
+docker build -f docker/msvc.clang.docker -t msvc-wine:clang \
+  --build-arg BASE=msvc-wine:latest .
+```
+
+Full test suite (installs build tools and runs `test/test.sh`):
+
+```bash
+docker build -f docker/msvc.test.docker -t msvc-wine:test \
+  --build-arg BASE=msvc-wine:latest .
+```
+
 
 # Build instructions for local installation
 
