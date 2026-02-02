@@ -10,6 +10,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         cmake \
+        clang \
         curl \
         file \
         git \
@@ -20,6 +21,7 @@ RUN apt-get update \
         python3 \
         python3-venv \
         sccache \
+        zip \
         unzip \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
