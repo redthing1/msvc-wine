@@ -103,6 +103,15 @@ docker build -f docker/msvc.buildtools.docker -t msvc-wine:buildtools-trim \
   --build-arg BASE=msvc-wine:trim .
 ```
 
+## Export and import images
+
+You can save images to a file and reload them later without a registry.
+
+```bash
+docker save msvc-wine:buildtools-trim | zstd -10 -T0 -o msvc-wine_buildtools_trim.zst
+zstd -d -c msvc-wine_buildtools_trim.zst | docker load
+```
+
 ## Configure target architectures (optional)
 
 By default only `x64` is included. To include additional targets:
