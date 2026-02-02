@@ -131,7 +131,7 @@ Useful build arguments:
 - `WITH_WINBIND` - include winbind in the runtime image (default: `no`)
 - `MSVC_TRIM` - enable trimming of unused components (default: `no`)
 - `MSVC_TRIM_FLAGS` - trimming options passed to `scripts/trim-msvc.sh`
-- `DEBIAN_VERSION` / `DEBIAN_FLAVOR` - base distro (defaults: `bookworm-slim`)
+- `DEBIAN_VERSION` / `DEBIAN_FLAVOR` - base distro (defaults: `trixie-slim`)
 
 ## Validation workflows
 
