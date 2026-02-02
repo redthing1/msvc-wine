@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 
-ARG BASE=msvc
+ARG BASE=msvc-wine:latest
 FROM ${BASE}
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
