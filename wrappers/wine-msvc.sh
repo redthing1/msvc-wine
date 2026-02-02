@@ -41,10 +41,12 @@ for a; do
 		path=${a#*:}
 		# Rewrite options like -MANIFESTINPUT:/absolute/path into -MANIFESTINPUT:z:/absolute/path.
 		;;
-	/*)
+	/*/*)
 		# Rewrite options like /absolute/path into z:/absolute/path.
 		# This is essential for disambiguating e.g. /home/user/file from the
 		# tool option /h with the value ome/user/file.
+		# Only rewrite paths that contain another '/' to avoid clobbering
+		# flags like /machine:x64.
 		path=$a
 		;;
 	*)
