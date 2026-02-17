@@ -1,1 +1,17 @@
+# Archive artifacts
 *.zst
+
+# Local build artifacts (MSVC/Windows)
+*.obj
+*.o
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+!wrappers/*.exe
+
+# Local example outputs
+examples/simple-static/out/
