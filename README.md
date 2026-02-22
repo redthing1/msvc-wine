@@ -22,6 +22,12 @@ docker build -f docker/msvc.docker -t msvc-wine:trim-multi --build-arg MSVC_TRIM
 docker build -f docker/msvc.buildtools.docker -t msvc-wine:buildtools-trim-multi --build-arg BASE=msvc-wine:trim-multi .
 ```
 
+or using `make`:
+```bash
+make buildtools-trim-x64
+make buildtools-trim-multi
+```
+
 interactive shell (mount current dir at `/work`):
 ```bash
 docker run --rm -it -v "$PWD:/work" -w /work msvc-wine:buildtools-trim-x64 /bin/bash
