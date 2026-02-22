@@ -11,17 +11,20 @@ msvc + windows sdk for linux (wine), as docker images
 
 ## quick start
 
-build a trimmed buildtools image:
+build trimmed buildtools images:
 ```bash
-# trimmed base toolchain
-docker build -f docker/msvc.docker -t msvc-wine:trim --build-arg MSVC_TRIM=yes .
-# buildtools layer
-docker build -f docker/msvc.buildtools.docker -t msvc-wine:buildtools-trim --build-arg BASE=msvc-wine:trim .
+# x64 base + buildtools
+docker build -f docker/msvc.docker -t msvc-wine:trim-x64 --build-arg MSVC_TRIM=yes --build-arg MSVC_ARCHS="x64" .
+docker build -f docker/msvc.buildtools.docker -t msvc-wine:buildtools-trim-x64 --build-arg BASE=msvc-wine:trim-x64 .
+
+# multi-arch base + buildtools
+docker build -f docker/msvc.docker -t msvc-wine:trim-multi --build-arg MSVC_TRIM=yes --build-arg MSVC_ARCHS="x86 x64 arm arm64" .
+docker build -f docker/msvc.buildtools.docker -t msvc-wine:buildtools-trim-multi --build-arg BASE=msvc-wine:trim-multi .
 ```
 
 interactive shell (mount current dir at `/work`):
 ```bash
-docker run --rm -it -v "$PWD:/work" -w /work msvc-wine:buildtools-trim /bin/bash
+docker run --rm -it -v "$PWD:/work" -w /work msvc-wine:buildtools-trim-x64 /bin/bash
 ```
 
 inside the container:
@@ -54,30 +57,33 @@ dockerfiles accept the following args:
 
 example: keep multiple target archs:
 ```bash
-docker build -f docker/msvc.docker -t msvc-wine:trim-multiarch --build-arg MSVC_TRIM=yes --build-arg MSVC_ARCHS="x86 x64 arm arm64" .
+docker build -f docker/msvc.docker -t msvc-wine:trim-multi --build-arg MSVC_TRIM=yes --build-arg MSVC_ARCHS="x86 x64 arm arm64" .
+docker build -f docker/msvc.buildtools.docker -t msvc-wine:buildtools-trim-multi --build-arg BASE=msvc-wine:trim-multi .
 ```
 
 ## import/export images
 
 export:
 ```bash
-docker save msvc-wine:buildtools-trim | zstd -10 -T0 -o msvc-wine_buildtools_trim.zst
+docker save msvc-wine:buildtools-trim-x64 | zstd -10 -T0 -o msvc-wine_buildtools_trim_x64.zst
+docker save msvc-wine:buildtools-trim-multi | zstd -10 -T0 -o msvc-wine_buildtools_trim_multi.zst
 ```
 
 import:
 ```bash
-zstd -d -c msvc-wine_buildtools_trim.zst | docker load
+zstd -d -c msvc-wine_buildtools_trim_x64.zst | docker load
+zstd -d -c msvc-wine_buildtools_trim_multi.zst | docker load
 ```
 
 ## validation
 
 sanity checks:
 ```bash
-docker build -f docker/msvc.hello.docker -t msvc-wine:hello --build-arg BASE=msvc-wine:trim .
-docker build -f docker/msvc.clang.docker -t msvc-wine:clang --build-arg BASE=msvc-wine:trim .
+docker build -f docker/msvc.hello.docker -t msvc-wine:hello --build-arg BASE=msvc-wine:trim-x64 .
+docker build -f docker/msvc.clang.docker -t msvc-wine:clang --build-arg BASE=msvc-wine:trim-x64 .
 ```
 
 full test run:
 ```bash
-docker build -f docker/msvc.test.docker -t msvc-wine:test --build-arg BASE=msvc-wine:trim .
+docker build -f docker/msvc.test.docker -t msvc-wine:test --build-arg BASE=msvc-wine:trim-x64 .
 ```
